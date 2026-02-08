@@ -31,16 +31,16 @@ if __name__ == '__main__':
 
     # L1正则的惩罚项系数sr
     model.train(
-        sr=1e-3,
+        sr=1e-4,
         data="E:\\tools\\jupyter_project\\op_projects\\YOLOdemo\\visdrone.yaml",
         cfg='ultralytics/cfg/default.yaml',
         project='.',
-        name='runs/train-sparsity-1080',
+        name='runs/train-sparsity',
         device=0, # NOTE: 目前只能单卡训, DDP下多卡训不会产生稀疏效果(TODO)
-        epochs=40,
-        imgsz=1080,
+        epochs=300,
+        imgsz=1024,
         batch=1,
         optimizer='SGD',
         lr0=1e-3,
-        patience=50 # 注意patience要比epochs大, 防止训练过早结束
+        patience=300 # 注意patience要比epochs大, 防止训练过早结束
     )
