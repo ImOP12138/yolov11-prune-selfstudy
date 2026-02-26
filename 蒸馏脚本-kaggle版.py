@@ -123,8 +123,9 @@ class DistillationLoss:
     def bbox_decode(self, anchor_points, pred_dist):
         """解码预测的边界框"""
         b, a, c = pred_dist.shape
-        proj = self.proj.to(pred_dist.device)
-        pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(
+        reg_max = c // 4
+        proj = torch.arange(reg_max, dtype=torch.float, device=pred_dist.device)
+        pred_dist = pred_dist.view(b, a, 4, reg_max).softmax(3).matmul(
             proj.type(pred_dist.dtype)
         )
         return self._dist2bbox(pred_dist, anchor_points, xywh=False)
@@ -213,13 +214,20 @@ class DistillationLoss:
         no_student = feats_student[0].shape[1]
         no_teacher = feats_teacher[0].shape[1]
         
-        pred_distri_s, pred_scores_s = torch.cat(
-            [xi.view(feats_student[0].shape[0], no_student, -1) for xi in feats_student], 2
-        ).split((self.reg_max * 4, self.nc), 1)
+        cat_student = torch.cat([xi.view(feats_student[0].shape[0], no_student, -1) for xi in feats_student], 2)
+        cat_teacher = torch.cat([xi.view(feats_teacher[0].shape[0], no_teacher, -1) for xi in feats_teacher], 2)
         
-        pred_distri_t, pred_scores_t = torch.cat(
-            [xi.view(feats_teacher[0].shape[0], no_teacher, -1) for xi in feats_teacher], 2
-        ).split((self.reg_max * 4, self.nc), 1)
+        student_reg_channels = min(self.reg_max * 4, no_student - self.nc) if no_student > self.nc else no_student // 2
+        student_nc_channels = no_student - student_reg_channels
+        
+        teacher_reg_channels = self.reg_max * 4
+        teacher_nc_channels = self.nc
+        
+        pred_distri_s = cat_student[:, :student_reg_channels, :]
+        pred_scores_s = cat_student[:, student_reg_channels:, :]
+        
+        pred_distri_t = cat_teacher[:, :teacher_reg_channels, :]
+        pred_scores_t = cat_teacher[:, teacher_reg_channels:, :]
         
         pred_scores_s = pred_scores_s.permute(0, 2, 1).contiguous()
         pred_distri_s = pred_distri_s.permute(0, 2, 1).contiguous()
@@ -264,17 +272,22 @@ class DistillationLoss:
             iou = bbox_iou(pred_bboxes_s[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
             loss[0] = ((1.0 - iou) * weight).sum() / target_scores_sum
             
-            target_ltrb = bbox2dist(anchor_points, target_bboxes, self.reg_max - 1)
-            dfl_loss = self._dfl_loss(pred_distri_s[fg_mask].view(-1, self.reg_max), target_ltrb[fg_mask]) * weight
+            student_reg_max = pred_distri_s.shape[-1] // 4
+            target_ltrb = bbox2dist(anchor_points, target_bboxes, student_reg_max - 1)
+            dfl_loss = self._dfl_loss(pred_distri_s[fg_mask].view(-1, student_reg_max), target_ltrb[fg_mask], student_reg_max) * weight
             loss[2] = dfl_loss.sum() / target_scores_sum
         
         if self.distill_type in ['logit', 'both']:
-            loss_distill_logit = self.kl_divergence_loss(
-                pred_scores_s.view(-1, self.nc),
-                pred_scores_t.view(-1, self.nc).detach(),
-                self.temp
-            )
-            loss[3] += loss_distill_logit * self.alpha
+            student_nc_actual = pred_scores_s.shape[-1]
+            teacher_nc_actual = pred_scores_t.shape[-1]
+            min_nc = min(student_nc_actual, teacher_nc_actual)
+            if min_nc > 0:
+                loss_distill_logit = self.kl_divergence_loss(
+                    pred_scores_s.view(-1, student_nc_actual)[:, :min_nc],
+                    pred_scores_t.view(-1, teacher_nc_actual)[:, :min_nc].detach(),
+                    self.temp
+                )
+                loss[3] += loss_distill_logit * self.alpha
         
         if self.distill_type in ['feature', 'both'] and student_feats is not None and teacher_feats is not None:
             loss_distill_feat = self.feature_distillation_loss(student_feats, teacher_feats)
@@ -286,9 +299,11 @@ class DistillationLoss:
         
         return loss.sum() * batch_size, loss.detach()
     
-    def _dfl_loss(self, pred_dist, target):
+    def _dfl_loss(self, pred_dist, target, reg_max=None):
         """Distribution Focal Loss"""
-        target = target.clamp_(0, self.reg_max - 1 - 0.01)
+        if reg_max is None:
+            reg_max = pred_dist.shape[-1]
+        target = target.clamp_(0, reg_max - 1 - 0.01)
         tl = target.long()
         tr = tl + 1
         wl = tr - target
