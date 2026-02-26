@@ -157,7 +157,7 @@ class DistillationLoss:
                 n = matches.sum()
                 if n:
                     out[j, :n] = targets[matches, 1:]
-            out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
+            out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor.to(self.device)))
         return out
     
     def kl_divergence_loss(self, student_logits, teacher_logits, temp):
@@ -208,14 +208,14 @@ class DistillationLoss:
             device = preds_student.device
         loss = torch.zeros(4, device=device)
         
-        feats_student = preds_student[1] if isinstance(preds_student, (tuple, list)) else preds_student
-        feats_teacher = preds_teacher[1] if isinstance(preds_teacher, (tuple, list)) else preds_teacher
+        feats_student = preds_student[1] if isinstance(preds_student, tuple) else preds_student
+        feats_teacher = preds_teacher[1] if isinstance(preds_teacher, tuple) else preds_teacher
         
         dtype = feats_student[0].dtype
         batch_size = feats_student[0].shape[0]
         device = feats_student[0].device
         
-        anchor_points, stride_tensor = make_anchors(feats_student, self.stride, 0.5)
+        anchor_points, stride_tensor = make_anchors(feats_student, self.stride.to(device), 0.5)
         anchor_points = anchor_points.to(device)
         stride_tensor = stride_tensor.to(device)
         
@@ -247,6 +247,8 @@ class DistillationLoss:
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets.to(device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes = targets.split((1, 4), 2)
+        gt_labels = gt_labels.to(device)
+        gt_bboxes = gt_bboxes.to(device)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
         
         pred_bboxes_s = self.bbox_decode(anchor_points, pred_distri_s)
