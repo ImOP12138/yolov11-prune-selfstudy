@@ -597,6 +597,7 @@ class DistillationTrainer(BaseTrainer):
                     preds_student = self.model(batch["img"])
                     
                     with torch.no_grad():
+                        self.teacher_model.model.train()
                         preds_teacher = self.teacher_model.model(batch["img"])
                     
                     self.loss, self.loss_items = self.distill_loss(preds_student, preds_teacher, batch)
