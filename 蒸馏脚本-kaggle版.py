@@ -210,12 +210,15 @@ class DistillationLoss:
         feats_student = preds_student[1] if isinstance(preds_student, (tuple, list)) else preds_student
         feats_teacher = preds_teacher[1] if isinstance(preds_teacher, (tuple, list)) else preds_teacher
         
+        no_student = feats_student[0].shape[1]
+        no_teacher = feats_teacher[0].shape[1]
+        
         pred_distri_s, pred_scores_s = torch.cat(
-            [xi.view(feats_student[0].shape[0], self.no, -1) for xi in feats_student], 2
+            [xi.view(feats_student[0].shape[0], no_student, -1) for xi in feats_student], 2
         ).split((self.reg_max * 4, self.nc), 1)
         
         pred_distri_t, pred_scores_t = torch.cat(
-            [xi.view(feats_teacher[0].shape[0], self.no, -1) for xi in feats_teacher], 2
+            [xi.view(feats_teacher[0].shape[0], no_teacher, -1) for xi in feats_teacher], 2
         ).split((self.reg_max * 4, self.nc), 1)
         
         pred_scores_s = pred_scores_s.permute(0, 2, 1).contiguous()
