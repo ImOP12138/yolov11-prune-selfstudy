@@ -211,6 +211,16 @@ class DistillationLoss:
         feats_student = preds_student[1] if isinstance(preds_student, (tuple, list)) else preds_student
         feats_teacher = preds_teacher[1] if isinstance(preds_teacher, (tuple, list)) else preds_teacher
         
+        dtype = feats_student[0].dtype
+        batch_size = feats_student[0].shape[0]
+        device = feats_student[0].device
+        
+        anchor_points, stride_tensor = make_anchors(feats_student, self.stride, 0.5)
+        anchor_points = anchor_points.to(device)
+        stride_tensor = stride_tensor.to(device)
+        
+        imgsz = torch.tensor(feats_student[0].shape[2:], device=device, dtype=dtype) * self.stride[0]
+        
         no_student = feats_student[0].shape[1]
         no_teacher = feats_teacher[0].shape[1]
         
@@ -233,14 +243,6 @@ class DistillationLoss:
         pred_distri_s = pred_distri_s.permute(0, 2, 1).contiguous()
         pred_scores_t = pred_scores_t.permute(0, 2, 1).contiguous()
         pred_distri_t = pred_distri_t.permute(0, 2, 1).contiguous()
-        
-        dtype = pred_scores_s.dtype
-        batch_size = pred_scores_s.shape[0]
-        device = pred_scores_s.device
-        imgsz = torch.tensor(feats_student[0].shape[2:], device=device, dtype=dtype) * self.stride[0]
-        anchor_points, stride_tensor = make_anchors(feats_student, self.stride, 0.5)
-        anchor_points = anchor_points.to(device)
-        stride_tensor = stride_tensor.to(device)
         
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets.to(device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
@@ -592,10 +594,10 @@ class DistillationTrainer(BaseTrainer):
                 with autocast(self.amp):
                     batch = self.preprocess_batch(batch)
                     
-                    preds_student = self.model.predict(batch["img"])
+                    preds_student = self.model(batch["img"])
                     
                     with torch.no_grad():
-                        preds_teacher = self.teacher_model.model.predict(batch["img"])
+                        preds_teacher = self.teacher_model.model(batch["img"])
                     
                     self.loss, self.loss_items = self.distill_loss(preds_student, preds_teacher, batch)
                     
