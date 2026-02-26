@@ -440,10 +440,26 @@ class DistillationTrainer(BaseTrainer):
             self.test_loader, save_dir=self.save_dir, args=deepcopy(self.args), _callbacks=self.callbacks
         )
     
+    def validate(self):
+        """
+        运行验证，使用标准检测损失（3个值）而不是蒸馏损失（4个值）
+        """
+        original_loss_items = self.loss_items.clone() if hasattr(self, 'loss_items') and self.loss_items is not None else None
+        self.loss_items = torch.zeros(3, device=self.device)
+        metrics = self.validator(self)
+        fitness = metrics.pop("fitness", -self.loss.detach().cpu().numpy())
+        if not self.best_fitness or self.best_fitness < fitness:
+            self.best_fitness = fitness
+        if original_loss_items is not None:
+            self.loss_items = original_loss_items
+        return metrics, fitness
+    
     def label_loss_items(self, loss_items=None, prefix="train"):
         keys = [f"{prefix}/{x}" for x in self.loss_names]
         if loss_items is not None:
             loss_items = [round(float(x), 5) for x in loss_items]
+            if len(loss_items) == 3:
+                loss_items.append(0.0)
             return dict(zip(keys, loss_items))
         else:
             return keys
