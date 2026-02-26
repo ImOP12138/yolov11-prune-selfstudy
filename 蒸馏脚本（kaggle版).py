@@ -123,8 +123,9 @@ class DistillationLoss:
     def bbox_decode(self, anchor_points, pred_dist):
         """解码预测的边界框"""
         b, a, c = pred_dist.shape
+        proj = self.proj.to(pred_dist.device)
         pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(
-            self.proj.type(pred_dist.dtype)
+            proj.type(pred_dist.dtype)
         )
         return self._dist2bbox(pred_dist, anchor_points, xywh=False)
     
@@ -200,7 +201,7 @@ class DistillationLoss:
             student_feats: 学生模型的中间特征图 (可选)
             teacher_feats: 教师模型的中间特征图 (可选)
         """
-        loss = torch.zeros(4, device=self.device)
+        loss = torch.zeros(4, device=preds_student[0].device if isinstance(preds_student, tuple) else preds_student.device)
         
         feats_student = preds_student[1] if isinstance(preds_student, tuple) else preds_student
         feats_teacher = preds_teacher[1] if isinstance(preds_teacher, tuple) else preds_teacher
@@ -220,11 +221,14 @@ class DistillationLoss:
         
         dtype = pred_scores_s.dtype
         batch_size = pred_scores_s.shape[0]
-        imgsz = torch.tensor(feats_student[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]
+        device = pred_scores_s.device
+        imgsz = torch.tensor(feats_student[0].shape[2:], device=device, dtype=dtype) * self.stride[0]
         anchor_points, stride_tensor = make_anchors(feats_student, self.stride, 0.5)
+        anchor_points = anchor_points.to(device)
+        stride_tensor = stride_tensor.to(device)
         
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
-        targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
+        targets = self.preprocess(targets.to(device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes = targets.split((1, 4), 2)
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
         
