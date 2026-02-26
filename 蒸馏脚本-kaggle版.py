@@ -782,7 +782,7 @@ def parse_opt():
                         help='项目保存目录')
     parser.add_argument('--name', type=str, default='runs/distill',
                         help='实验名称')
-    parser.add_argument('--epochs', type=int, default=2,
+    parser.add_argument('--epochs', type=int, default=80,
                         help='训练轮数')
     parser.add_argument('--batch', type=int, default=12,
                         help='批次大小')
