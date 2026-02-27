@@ -764,10 +764,10 @@ def parse_opt():
     parser = argparse.ArgumentParser(description='YOLOv11 Knowledge Distillation Training')
     
     parser.add_argument('--student-weights', type=str, 
-                        default=str(ROOT / '0.13微调后的模型/OT-pruned0.13.pt'),
+                        default=str(ROOT / '0.17微调后的模型/OT-pruned0.17.pt'),
                         help='剪枝后的学生模型权重路径')
     parser.add_argument('--maskbndict-path', type=str,
-                        default=str(ROOT / 'weights-pruned-yolo11n-ot-lastepoch-0.13/pruned_ot.pt'),
+                        default=str(ROOT / 'weights-pruned-yolo11n-ot-lastepoch-0.17/pruned_ot.pt'),
                         help='maskbndict文件路径 (如果学生模型权重中不包含maskbndict)')
     parser.add_argument('--teacher-weights', type=str,
                         default=str(ROOT / 'yolo11n-bestbase.pt'),
@@ -782,7 +782,7 @@ def parse_opt():
                         help='项目保存目录')
     parser.add_argument('--name', type=str, default='runs/distill',
                         help='实验名称')
-    parser.add_argument('--epochs', type=int, default=80,
+    parser.add_argument('--epochs', type=int, default=30,
                         help='训练轮数')
     parser.add_argument('--batch', type=int, default=12,
                         help='批次大小')
